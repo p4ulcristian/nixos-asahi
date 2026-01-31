@@ -36,31 +36,25 @@
 
   # ----- PACKAGES -----
   environment.systemPackages = with pkgs; [
-    # Core
-    vim neovim git htop btop fastfetch wget curl
+    # Core tools
+    git wget curl htop
 
-    # Hyprland
-    kitty foot wofi fuzzel wl-clipboard grim slurp
-    swww mako brightnessctl pamixer playerctl
+    # Hyprland essentials
+    foot wl-clipboard grim slurp swww
+    brightnessctl pamixer playerctl
 
     # Dev - Clojure
-    clojure
-    leiningen
-    babashka
-    clojure-lsp
+    clojure leiningen babashka clojure-lsp
 
     # Dev - JavaScript
-    bun
-    nodejs
+    bun nodejs
 
     # Apps
-    firefox
-    vesktop          # Discord client (works on ARM)
-    _1password-gui
-    _1password-cli
+    firefox google-chrome vscode
+    vesktop _1password-gui _1password-cli
 
     # Theming
-    adwaita-icon-theme papirus-icon-theme
+    papirus-icon-theme
   ];
 
   # ----- FONTS -----
@@ -93,7 +87,7 @@
 
     # Auto-start
     exec-once = caelestia-shell
-    exec-once = swww init
+    exec-once = swww init && sleep 1 && swww img --fill-color 0f0f0f /dev/null 2>/dev/null || true
 
     # Input
     input {
@@ -181,13 +175,40 @@
     bindm = $mod, mouse:273, resizewindow
   '';
 
-  # Symlink config
+  # Symlink config and setup Caelestia
   system.activationScripts.hyprlandConfig = ''
     mkdir -p /home/paul/.config/hypr
     ln -sf /etc/hypr/hyprland.conf /home/paul/.config/hypr/hyprland.conf
     chown -R paul:users /home/paul/.config/hypr
+
+    # Caelestia config - glossy dark theme
     mkdir -p /home/paul/.config/caelestia
-    mkdir -p /home/paul/.local/state/caelestia
+    mkdir -p /home/paul/.local/state/caelestia/wallpaper
+
+    # Shell config with transparency enabled
+    cat > /home/paul/.config/caelestia/shell.json << 'SHELLJSON'
+    {
+      "appearance": {
+        "transparency": {
+          "enabled": true,
+          "base": 0.85,
+          "layers": 0.4
+        }
+      },
+      "sidebar": {
+        "enabled": true
+      }
+    }
+    SHELLJSON
+
+    # Dark color scheme
+    cat > /home/paul/.local/state/caelestia/scheme.json << 'SCHEMEJSON'
+    {"name":"glossy-dark","flavour":"dark","mode":"dark","colours":{"primary_paletteKeyColor":"6366F1","secondary_paletteKeyColor":"8B5CF6","tertiary_paletteKeyColor":"06B6D4","neutral_paletteKeyColor":"1E1E2E","neutralVariant_paletteKeyColor":"313244","background":"0F0F0F","onBackground":"E4E4E7","surface":"18181B","surfaceDim":"09090B","surfaceBright":"27272A","surfaceContainerLowest":"09090B","surfaceContainerLow":"18181B","surfaceContainer":"1F1F23","surfaceContainerHigh":"27272A","surfaceContainerHighest":"3F3F46","onSurface":"FAFAFA","surfaceVariant":"27272A","onSurfaceVariant":"A1A1AA","inverseSurface":"FAFAFA","inverseOnSurface":"18181B","outline":"52525B","outlineVariant":"3F3F46","shadow":"000000","scrim":"000000","surfaceTint":"6366F1","primary":"818CF8","onPrimary":"0F0F0F","primaryContainer":"312E81","onPrimaryContainer":"C7D2FE","inversePrimary":"4338CA","secondary":"A78BFA","onSecondary":"0F0F0F","secondaryContainer":"4C1D95","onSecondaryContainer":"DDD6FE","tertiary":"22D3EE","onTertiary":"0F0F0F","tertiaryContainer":"164E63","onTertiaryContainer":"A5F3FC","error":"F87171","onError":"0F0F0F","errorContainer":"7F1D1D","onErrorContainer":"FECACA"}}
+    SCHEMEJSON
+
+    # Empty notifs
+    echo '[]' > /home/paul/.local/state/caelestia/notifs.json
+
     chown -R paul:users /home/paul/.config/caelestia
     chown -R paul:users /home/paul/.local/state/caelestia
   '';
