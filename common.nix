@@ -169,8 +169,8 @@
       hide_on_key_press = true
     }
 
-    # Keybindings
-    $mod = SUPER
+    # Keybindings (ALT works better in VM since host catches SUPER)
+    $mod = ALT
 
     bind = $mod, Return, exec, foot
     bind = $mod, Q, killactive
