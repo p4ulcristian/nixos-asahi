@@ -38,12 +38,10 @@
     # Core tools
     git wget curl htop
 
-    # Omarchy Desktop Stack
-    waybar              # Bar
-    mako                # Notifications
-    fuzzel              # Launcher
+    # AGS Desktop Shell
+    ags                 # Aylur's GTK Shell v2
     swaybg              # Wallpaper
-    swayosd             # Volume/brightness OSD
+    fuzzel              # Launcher (backup)
     hyprlock            # Lock screen
     hypridle            # Idle management
 
@@ -91,11 +89,9 @@
     # Monitor
     monitor=,1920x1080@60,auto,1
 
-    # Autostart - Omarchy stack
-    exec-once = waybar
-    exec-once = mako
-    exec-once = swaybg -i ~/.config/wallpaper.jpg -m fill || swaybg -c "#0f0f0f"
-    exec-once = swayosd-server
+    # Autostart - AGS shell
+    exec-once = ags run ~/.config/ags/bar.tsx
+    exec-once = swaybg -c "#0f0f0f"
     exec-once = hypridle
 
     # Environment
@@ -218,81 +214,48 @@
     bindm = $mod, mouse:273, resizewindow
   '';
 
-  # ----- WAYBAR CONFIG -----
-  environment.etc."xdg/waybar/config".text = builtins.toJSON {
-    layer = "top";
-    position = "top";
-    height = 30;
-    modules-left = [ "hyprland/workspaces" ];
-    modules-center = [ "clock" ];
-    modules-right = [ "pulseaudio" "battery" "network" "tray" ];
+  # ----- AGS BAR CONFIG -----
+  environment.etc."ags/bar.tsx".text = ''
+    #!/usr/bin/env -S ags run
+    import { App, Astal, Gdk } from "astal/gtk3"
+    import { Variable } from "astal"
+    import { exec, execAsync } from "astal/process"
 
-    clock = {
-      format = "{:%H:%M}";
-      format-alt = "{:%Y-%m-%d %H:%M}";
-    };
-    battery = {
-      format = "{icon} {capacity}%";
-      format-icons = [ "" "" "" "" "" ];
-    };
-    network = {
-      format-wifi = " {signalStrength}%";
-      format-ethernet = "";
-      format-disconnected = "";
-    };
-    pulseaudio = {
-      format = "{icon} {volume}%";
-      format-muted = "";
-      format-icons.default = [ "" "" "" ];
-    };
-  };
+    const time = Variable("").poll(1000, () => exec("date '+%H:%M'"))
 
-  environment.etc."xdg/waybar/style.css".text = ''
-    * {
-      font-family: "JetBrainsMono Nerd Font";
-      font-size: 13px;
+    function Bar(gdkmonitor: Gdk.Monitor) {
+      return <window
+        gdkmonitor={gdkmonitor}
+        exclusivity={Astal.Exclusivity.EXCLUSIVE}
+        anchor={Astal.WindowAnchor.TOP | Astal.WindowAnchor.LEFT | Astal.WindowAnchor.RIGHT}
+        application={App}>
+        <centerbox className="bar">
+          <box halign={Gtk.Align.START}>
+            <label label="  1 2 3 4 5" />
+          </box>
+          <label className="clock" label={time()} />
+          <box halign={Gtk.Align.END}>
+            <label label="  Perfect" />
+          </box>
+        </centerbox>
+      </window>
     }
-    window#waybar {
-      background: rgba(15, 15, 15, 0.9);
-      color: #ffffff;
-    }
-    #workspaces button {
-      padding: 0 8px;
-      color: #888888;
-    }
-    #workspaces button.active {
-      color: #33ccff;
-    }
-    #clock, #battery, #network, #pulseaudio {
-      padding: 0 10px;
-    }
-  '';
 
-  # ----- MAKO CONFIG -----
-  environment.etc."xdg/mako/config".text = ''
-    font=JetBrainsMono Nerd Font 11
-    background-color=#1a1a1aee
-    text-color=#ffffff
-    border-color=#33ccff
-    border-radius=0
-    default-timeout=5000
-    padding=10
-    margin=10
-  '';
-
-  # ----- FUZZEL CONFIG -----
-  environment.etc."xdg/fuzzel/fuzzel.ini".text = ''
-    [main]
-    font=JetBrainsMono Nerd Font:size=12
-    terminal=foot
-    layer=overlay
-
-    [colors]
-    background=0f0f0fdd
-    text=ffffffff
-    selection=33ccffff
-    selection-text=000000ff
-    border=33ccffff
+    App.start({
+      css: `
+        .bar {
+          background: rgba(15, 15, 15, 0.95);
+          color: white;
+          font-family: JetBrainsMono Nerd Font;
+          font-size: 14px;
+          padding: 6px 16px;
+        }
+        .clock { color: #33ccff; }
+      `,
+      main() {
+        App.get_monitors().forEach(Bar)
+      },
+    })
   '';
 
   # ----- HYPRLOCK CONFIG -----
@@ -327,17 +290,13 @@
   # Setup user config dirs
   system.activationScripts.hyprlandConfig = ''
     mkdir -p /home/paul/.config/hypr
-    mkdir -p /home/paul/.config/waybar
-    mkdir -p /home/paul/.config/mako
-    mkdir -p /home/paul/.config/fuzzel
+    mkdir -p /home/paul/.config/ags
 
     ln -sf /etc/hypr/hyprland.conf /home/paul/.config/hypr/hyprland.conf
-    ln -sf /etc/xdg/waybar/config /home/paul/.config/waybar/config
-    ln -sf /etc/xdg/waybar/style.css /home/paul/.config/waybar/style.css
-    ln -sf /etc/xdg/mako/config /home/paul/.config/mako/config
-    ln -sf /etc/xdg/fuzzel/fuzzel.ini /home/paul/.config/fuzzel/fuzzel.ini
     ln -sf /etc/xdg/hypr/hyprlock.conf /home/paul/.config/hypr/hyprlock.conf
     ln -sf /etc/xdg/hypr/hypridle.conf /home/paul/.config/hypr/hypridle.conf
+    cp /etc/ags/bar.tsx /home/paul/.config/ags/bar.tsx
+    chmod +x /home/paul/.config/ags/bar.tsx
 
     chown -R paul:users /home/paul/.config
   '';
