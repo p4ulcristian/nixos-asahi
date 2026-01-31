@@ -38,12 +38,13 @@
     # Core tools
     git wget curl htop
 
-    # Omarchy Desktop Stack
-    waybar              # Bar
-    mako                # Notifications
-    fuzzel              # Launcher
+    # AGS Desktop Shell (replaces waybar, mako, etc)
+    ags                 # Aylur's GTK Shell
+    dart-sass           # For AGS styling
+
+    # Hyprland utilities
+    fuzzel              # Backup launcher
     swaybg              # Wallpaper
-    swayosd             # Volume/brightness OSD
     hyprlock            # Lock screen
     hypridle            # Idle management
 
@@ -91,11 +92,9 @@
     # Monitor
     monitor=,1920x1080@60,auto,1
 
-    # Autostart - Omarchy stack
-    exec-once = waybar
-    exec-once = mako
-    exec-once = swaybg -i ~/.config/wallpaper.jpg -m fill || swaybg -c "#0f0f0f"
-    exec-once = swayosd-server
+    # Autostart - AGS shell
+    exec-once = ags run
+    exec-once = swaybg -c "#0f0f0f"
     exec-once = hypridle
 
     # Environment
@@ -206,93 +205,147 @@
     bind = $mod SHIFT, 5, movetoworkspace, 5
     bind = $mod SHIFT, 6, movetoworkspace, 6
 
-    # Media keys with OSD
-    bind = , XF86MonBrightnessUp, exec, swayosd-client --brightness raise
-    bind = , XF86MonBrightnessDown, exec, swayosd-client --brightness lower
-    bind = , XF86AudioRaiseVolume, exec, swayosd-client --output-volume raise
-    bind = , XF86AudioLowerVolume, exec, swayosd-client --output-volume lower
-    bind = , XF86AudioMute, exec, swayosd-client --output-volume mute-toggle
+    # Media keys
+    bind = , XF86MonBrightnessUp, exec, brightnessctl set +5%
+    bind = , XF86MonBrightnessDown, exec, brightnessctl set 5%-
+    bind = , XF86AudioRaiseVolume, exec, pamixer -i 5
+    bind = , XF86AudioLowerVolume, exec, pamixer -d 5
+    bind = , XF86AudioMute, exec, pamixer -t
 
     # Mouse bindings
     bindm = $mod, mouse:272, movewindow
     bindm = $mod, mouse:273, resizewindow
   '';
 
-  # ----- WAYBAR CONFIG -----
-  environment.etc."xdg/waybar/config".text = builtins.toJSON {
-    layer = "top";
-    position = "top";
-    height = 30;
-    modules-left = [ "hyprland/workspaces" ];
-    modules-center = [ "clock" ];
-    modules-right = [ "pulseaudio" "battery" "network" "tray" ];
+  # ----- AGS CONFIG -----
+  environment.etc."ags/config.js".text = ''
+    const hyprland = await Service.import("hyprland");
+    const audio = await Service.import("audio");
+    const battery = await Service.import("battery");
+    const systemtray = await Service.import("systemtray");
 
-    clock = {
-      format = "{:%H:%M}";
-      format-alt = "{:%Y-%m-%d %H:%M}";
-    };
-    battery = {
-      format = "{icon} {capacity}%";
-      format-icons = [ "" "" "" "" "" ];
-    };
-    network = {
-      format-wifi = " {signalStrength}%";
-      format-ethernet = "";
-      format-disconnected = "";
-    };
-    pulseaudio = {
-      format = "{icon} {volume}%";
-      format-muted = "";
-      format-icons.default = [ "" "" "" ];
-    };
-  };
+    // Workspaces widget
+    function Workspaces() {
+      const activeId = hyprland.active.workspace.bind("id");
+      const workspaces = hyprland.bind("workspaces").as(ws =>
+        ws.sort((a, b) => a.id - b.id).map(({ id }) =>
+          Widget.Button({
+            on_clicked: () => hyprland.messageAsync(`dispatch workspace ''${id}`),
+            child: Widget.Label(`''${id}`),
+            class_name: activeId.as(i => i === id ? "active" : ""),
+          })
+        )
+      );
+      return Widget.Box({
+        class_name: "workspaces",
+        children: workspaces,
+      });
+    }
 
-  environment.etc."xdg/waybar/style.css".text = ''
+    // Clock widget
+    function Clock() {
+      const time = Variable("", {
+        poll: [1000, 'date "+%H:%M"'],
+      });
+      return Widget.Label({
+        class_name: "clock",
+        label: time.bind(),
+      });
+    }
+
+    // Volume widget
+    function Volume() {
+      const icons = { muted: "󰝟", low: "󰕿", medium: "󰖀", high: "󰕾" };
+      function getIcon() {
+        const vol = audio.speaker.volume * 100;
+        if (audio.speaker.is_muted) return icons.muted;
+        if (vol < 33) return icons.low;
+        if (vol < 66) return icons.medium;
+        return icons.high;
+      }
+      return Widget.Button({
+        class_name: "volume",
+        on_clicked: () => audio.speaker.is_muted = !audio.speaker.is_muted,
+        child: Widget.Label().hook(audio.speaker, self => {
+          self.label = `''${getIcon()} ''${Math.round(audio.speaker.volume * 100)}%`;
+        }),
+      });
+    }
+
+    // Battery widget
+    function BatteryWidget() {
+      const icons = ["󰂎", "󰁺", "󰁻", "󰁼", "󰁽", "󰁾", "󰁿", "󰂀", "󰂁", "󰂂", "󰁹"];
+      return Widget.Label({
+        class_name: "battery",
+        visible: battery.bind("available"),
+        label: battery.bind("percent").as(p => `''${icons[Math.floor(p / 10)]} ''${p}%`),
+      });
+    }
+
+    // System tray
+    function SysTray() {
+      const items = systemtray.bind("items").as(items =>
+        items.map(item => Widget.Button({
+          child: Widget.Icon({ icon: item.bind("icon") }),
+          on_primary_click: (_, event) => item.activate(event),
+          on_secondary_click: (_, event) => item.openMenu(event),
+          tooltip_markup: item.bind("tooltip_markup"),
+        }))
+      );
+      return Widget.Box({ children: items });
+    }
+
+    // Bar
+    function Bar(monitor = 0) {
+      return Widget.Window({
+        monitor,
+        name: `bar-''${monitor}`,
+        anchor: ["top", "left", "right"],
+        exclusivity: "exclusive",
+        child: Widget.CenterBox({
+          class_name: "bar",
+          start_widget: Widget.Box({ children: [Workspaces()] }),
+          center_widget: Clock(),
+          end_widget: Widget.Box({
+            hpack: "end",
+            spacing: 8,
+            children: [Volume(), BatteryWidget(), SysTray()],
+          }),
+        }),
+      });
+    }
+
+    App.config({
+      style: "/etc/ags/style.css",
+      windows: [Bar()],
+    });
+  '';
+
+  environment.etc."ags/style.css".text = ''
     * {
       font-family: "JetBrainsMono Nerd Font";
       font-size: 13px;
     }
-    window#waybar {
+    .bar {
       background: rgba(15, 15, 15, 0.9);
       color: #ffffff;
-    }
-    #workspaces button {
-      padding: 0 8px;
-      color: #888888;
-    }
-    #workspaces button.active {
-      color: #33ccff;
-    }
-    #clock, #battery, #network, #pulseaudio {
       padding: 0 10px;
     }
-  '';
-
-  # ----- MAKO CONFIG -----
-  environment.etc."xdg/mako/config".text = ''
-    font=JetBrainsMono Nerd Font 11
-    background-color=#1a1a1aee
-    text-color=#ffffff
-    border-color=#33ccff
-    border-radius=0
-    default-timeout=5000
-    padding=10
-    margin=10
-  '';
-
-  # ----- FUZZEL CONFIG -----
-  environment.etc."xdg/fuzzel/fuzzel.ini".text = ''
-    [main]
-    font=JetBrainsMono Nerd Font:size=12
-    terminal=foot
-    layer=overlay
-
-    [colors]
-    background=0f0f0fdd
-    text=ffffffff
-    selection=33ccffff
-    selection-text=000000ff
-    border=33ccffff
+    .workspaces button {
+      padding: 0 8px;
+      color: #888888;
+      background: transparent;
+      border: none;
+    }
+    .workspaces button.active {
+      color: #33ccff;
+    }
+    .clock {
+      color: #ffffff;
+    }
+    .volume, .battery {
+      padding: 0 5px;
+    }
   '';
 
   # ----- HYPRLOCK CONFIG -----
@@ -327,17 +380,13 @@
   # Setup user config dirs
   system.activationScripts.hyprlandConfig = ''
     mkdir -p /home/paul/.config/hypr
-    mkdir -p /home/paul/.config/waybar
-    mkdir -p /home/paul/.config/mako
-    mkdir -p /home/paul/.config/fuzzel
+    mkdir -p /home/paul/.config/ags
 
     ln -sf /etc/hypr/hyprland.conf /home/paul/.config/hypr/hyprland.conf
-    ln -sf /etc/xdg/waybar/config /home/paul/.config/waybar/config
-    ln -sf /etc/xdg/waybar/style.css /home/paul/.config/waybar/style.css
-    ln -sf /etc/xdg/mako/config /home/paul/.config/mako/config
-    ln -sf /etc/xdg/fuzzel/fuzzel.ini /home/paul/.config/fuzzel/fuzzel.ini
     ln -sf /etc/xdg/hypr/hyprlock.conf /home/paul/.config/hypr/hyprlock.conf
     ln -sf /etc/xdg/hypr/hypridle.conf /home/paul/.config/hypr/hypridle.conf
+    ln -sf /etc/ags/config.js /home/paul/.config/ags/config.js
+    ln -sf /etc/ags/style.css /home/paul/.config/ags/style.css
 
     chown -R paul:users /home/paul/.config
   '';
