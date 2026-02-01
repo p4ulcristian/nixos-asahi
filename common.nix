@@ -14,7 +14,7 @@
   services.greetd = {
     enable = true;
     settings.default_session = {
-      command = "Hyprland";
+      command = "uwsm start hyprland-uwsm.desktop";
       user = "paul";
     };
   };
@@ -38,8 +38,9 @@
     # Core tools
     git wget curl htop
 
-    # AGS Desktop Shell
-    ags                 # Aylur's GTK Shell v2
+    # Desktop Shell
+    quickshell          # Qt/QML shell
+    uwsm                # Universal Wayland Session Manager
     swaybg              # Wallpaper
     swww                # Animated wallpaper daemon
     fuzzel              # Launcher
@@ -90,10 +91,10 @@
     # Monitor
     monitor=,1920x1080@60,auto,1
 
-    # Autostart - AGS shell + wallpaper
+    # Autostart - QuickShell + wallpaper
     exec-once = swww-daemon
     exec-once = sleep 1 && swww img ~/.config/wallpaper.jpg --transition-type grow --transition-pos center
-    exec-once = ags run ~/.config/ags/bar.tsx
+    exec-once = quickshell -p ~/.config/quickshell
     exec-once = hypridle
 
     # Environment
@@ -111,10 +112,10 @@
       }
     }
 
-    # General - Omarchy style (sharp corners)
+    # General
     general {
-      gaps_in = 5
-      gaps_out = 10
+      gaps_in = 4
+      gaps_out = 8
       border_size = 2
       col.active_border = rgba(33ccffee) rgba(00ff99ee) 45deg
       col.inactive_border = rgba(595959aa)
@@ -122,9 +123,11 @@
       resize_on_border = true
     }
 
-    # Decoration - blur enabled, no rounding
+    # Decoration - rounded corners, blur, transparency
     decoration {
-      rounding = 0
+      rounding = 12
+      active_opacity = 0.95
+      inactive_opacity = 0.90
       blur {
         enabled = true
         size = 2
@@ -216,93 +219,146 @@
     bindm = $mod, mouse:273, resizewindow
   '';
 
-  # ----- AGS BAR CONFIG -----
-  environment.etc."ags/bar.tsx".text = ''
-    #!/usr/bin/env -S ags run
-    import { App, Astal, Gdk, Gtk } from "astal/gtk3"
-    import { Variable, bind } from "astal"
-    import { exec, execAsync } from "astal/process"
+  # ----- QUICKSHELL VERTICAL SIDEBAR -----
+  environment.etc."quickshell/shell.qml".text = ''
+    import QtQuick
+    import QtQuick.Layouts
+    import Quickshell
+    import Quickshell.Wayland
+    import Quickshell.Io
 
-    // Get Hyprland socket dynamically
-    const SOCK = exec("ls /run/user/1000/hypr/").trim()
-    const hyprctl = (cmd: string) => exec(`bash -c "HYPRLAND_INSTANCE_SIGNATURE=''${SOCK} hyprctl ''${cmd}"`)
+    ShellRoot {
+        id: root
 
-    const time = Variable("").poll(1000, () => exec("date \"+%a %b %d  %H:%M\""))
-    const user = exec("whoami").trim()
+        property int activeWorkspace: 1
+        property string hyprSock: ""
 
-    const volume = Variable("N/A").poll(2000, () => {
-      try { return exec("pamixer --get-volume") + "%" } catch { return "N/A" }
-    })
+        Component.onCompleted: {
+            sockProcess.running = true
+        }
 
-    const activeWs = Variable(1).poll(200, () => {
-      try {
-        return JSON.parse(hyprctl("activeworkspace -j")).id
-      } catch { return 1 }
-    })
+        Process {
+            id: sockProcess
+            command: ["ls", "/run/user/1000/hypr/"]
+            stdout: SplitParser {
+                onRead: data => {
+                    root.hyprSock = data.trim()
+                }
+            }
+        }
 
-    function Bar(gdkmonitor: Gdk.Monitor) {
-      return <window
-        gdkmonitor={gdkmonitor}
-        exclusivity={Astal.Exclusivity.EXCLUSIVE}
-        anchor={Astal.WindowAnchor.TOP | Astal.WindowAnchor.LEFT | Astal.WindowAnchor.RIGHT}
-        application={App}>
-        <centerbox className="bar">
-          <box halign={Gtk.Align.START}>
-            <label className="logo" label={" " + user} />
-            <box className="workspaces">
-              {[1, 2, 3, 4, 5].map(i => (
-                <button
-                  className={bind(activeWs).as(a => a === i ? "ws active" : "ws")}
-                  onClicked={() => execAsync(`bash -c "HYPRLAND_INSTANCE_SIGNATURE=''${SOCK} hyprctl dispatch workspace ''${i}"`)}>
-                  <label label={String(i)} />
-                </button>
-              ))}
-            </box>
-          </box>
-          <label className="clock" label={bind(time)} />
-          <box halign={Gtk.Align.END} className="right">
-            <label className="volume" label={bind(volume).as(v => " " + v)} />
-          </box>
-        </centerbox>
-      </window>
+        Timer {
+            interval: 150
+            running: true
+            repeat: true
+            onTriggered: {
+                if (root.hyprSock !== "") {
+                    wsProcess.running = true
+                }
+            }
+        }
+
+        Process {
+            id: wsProcess
+            command: ["bash", "-c", "HYPRLAND_INSTANCE_SIGNATURE=" + root.hyprSock + " hyprctl activeworkspace -j"]
+            stdout: SplitParser {
+                splitMarker: ""
+                onRead: data => {
+                    try {
+                        var obj = JSON.parse(data)
+                        root.activeWorkspace = obj.id
+                    } catch(e) {}
+                }
+            }
+        }
+
+        PanelWindow {
+            id: bar
+            anchors {
+                top: true
+                left: true
+                bottom: true
+            }
+            implicitWidth: 44
+            color: "#14141e"
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 8
+                spacing: 6
+
+                Repeater {
+                    model: 5
+                    Rectangle {
+                        id: wsBtn
+                        property int wsNum: index + 1
+                        property bool isActive: wsNum === root.activeWorkspace
+
+                        width: 28
+                        height: 28
+                        radius: 14
+                        Layout.alignment: Qt.AlignHCenter
+
+                        color: isActive ? "#33ccff" : "#333340"
+
+                        Behavior on color { ColorAnimation { duration: 150 } }
+                        Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutQuad } }
+
+                        scale: mouseArea.containsMouse ? 1.2 : 1.0
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: parent.wsNum
+                            color: parent.isActive ? "#000000" : "#888888"
+                            font.pixelSize: 12
+                            font.bold: parent.isActive
+                        }
+
+                        MouseArea {
+                            id: mouseArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onClicked: {
+                                clickProcess.command = ["bash", "-c", "HYPRLAND_INSTANCE_SIGNATURE=" + root.hyprSock + " hyprctl dispatch workspace " + parent.wsNum]
+                                clickProcess.running = true
+                            }
+                        }
+
+                        Process {
+                            id: clickProcess
+                        }
+                    }
+                }
+
+                Item { Layout.fillHeight: true }
+
+                Text {
+                    id: clock
+                    color: "#ffffff"
+                    font.pixelSize: 10
+                    font.bold: true
+                    Layout.alignment: Qt.AlignHCenter
+
+                    Timer {
+                        interval: 1000
+                        running: true
+                        repeat: true
+                        triggeredOnStart: true
+                        onTriggered: clock.text = Qt.formatTime(new Date(), "hh:mm")
+                    }
+                }
+
+                Item { Layout.fillHeight: true }
+
+                Text {
+                    text: "VOL"
+                    color: "#33ccff"
+                    font.pixelSize: 9
+                    Layout.alignment: Qt.AlignHCenter
+                }
+            }
+        }
     }
-
-    App.start({
-      css: `
-        .bar {
-          background: linear-gradient(180deg, rgba(20, 20, 30, 0.92) 0%, rgba(10, 10, 18, 0.88) 100%);
-          color: #e0e0e0;
-          font-family: JetBrainsMono Nerd Font;
-          font-size: 13px;
-          padding: 6px 14px;
-          border-bottom: 1px solid rgba(80, 200, 255, 0.3);
-        }
-        .logo { color: #33ccff; font-size: 16px; font-weight: bold; margin-right: 16px; }
-        .clock { color: #ffffff; font-weight: bold; font-size: 14px; }
-        .workspaces { margin-left: 4px; }
-        .ws {
-          background: rgba(255,255,255,0.1);
-          color: #666;
-          border: none;
-          border-radius: 50%;
-          min-width: 28px;
-          min-height: 28px;
-          padding: 0;
-          margin: 0 4px;
-        }
-        .ws label { margin: 0; padding: 0; }
-        .ws:hover { background: rgba(255,255,255,0.2); color: #aaa; }
-        .ws.active {
-          background: linear-gradient(135deg, #33ccff 0%, #00ff99 100%);
-          color: #000;
-          font-weight: bold;
-        }
-        .volume { color: #33ccff; margin-left: 16px; }
-      `,
-      main() {
-        App.get_monitors().forEach(Bar)
-      },
-    })
   '';
 
   # ----- HYPRLOCK CONFIG -----
@@ -337,13 +393,12 @@
   # Setup user config dirs
   system.activationScripts.hyprlandConfig = ''
     mkdir -p /home/paul/.config/hypr
-    mkdir -p /home/paul/.config/ags
+    mkdir -p /home/paul/.config/quickshell
 
     ln -sf /etc/hypr/hyprland.conf /home/paul/.config/hypr/hyprland.conf
     ln -sf /etc/xdg/hypr/hyprlock.conf /home/paul/.config/hypr/hyprlock.conf
     ln -sf /etc/xdg/hypr/hypridle.conf /home/paul/.config/hypr/hypridle.conf
-    cp /etc/ags/bar.tsx /home/paul/.config/ags/bar.tsx
-    chmod +x /home/paul/.config/ags/bar.tsx
+    cp /etc/quickshell/shell.qml /home/paul/.config/quickshell/shell.qml
 
     # Download a nice dark wallpaper if not present
     if [ ! -f /home/paul/.config/wallpaper.jpg ]; then
