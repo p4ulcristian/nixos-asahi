@@ -43,6 +43,9 @@
         nixos-apple-silicon.nixosModules.apple-silicon-support
         "${nixpkgs}/nixos/modules/installer/cd-dvd/installation-cd-minimal.nix"
         ({ config, pkgs, lib, ... }: {
+          # Disable ZFS (broken in current nixpkgs)
+          boot.supportedFilesystems.zfs = lib.mkForce false;
+          nixpkgs.config.allowBroken = true;
           # Include our config for post-install
           environment.etc."nixos-perfect/flake.nix".source = ./flake.nix;
           environment.etc."nixos-perfect/common.nix".source = ./common.nix;
