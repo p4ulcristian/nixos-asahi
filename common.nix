@@ -36,10 +36,11 @@
   # ----- PACKAGES -----
   environment.systemPackages = with pkgs; [
     # Core tools
-    git wget curl htop
+    git wget curl
+    btop                # Beautiful TUI system monitor
 
     # Desktop Shell
-    quickshell          # Qt/QML shell
+    quickshell          # Qt6/QML shell
     uwsm                # Universal Wayland Session Manager
     swaybg              # Wallpaper
     swww                # Animated wallpaper daemon
@@ -94,7 +95,7 @@
     # Autostart - QuickShell + wallpaper
     exec-once = swww-daemon
     exec-once = sleep 1 && swww img ~/.config/wallpaper.jpg --transition-type grow --transition-pos center
-    exec-once = quickshell -p ~/.config/quickshell
+    exec-once = quickshell -c ~/.config/quickshell
     exec-once = hypridle
 
     # Environment
@@ -220,146 +221,147 @@
     bindm = $mod, mouse:273, resizewindow
   '';
 
-  # ----- QUICKSHELL VERTICAL SIDEBAR -----
-  environment.etc."quickshell/shell.qml".text = ''
-    import QtQuick
-    import QtQuick.Layouts
-    import Quickshell
-    import Quickshell.Wayland
-    import Quickshell.Io
+  # ----- QUICKSHELL SIDEBAR -----
+  environment.etc."xdg/quickshell/shell.qml".text = ''
+import QtQuick
+import QtQuick.Layouts
+import Quickshell
+import Quickshell.Wayland
+import Quickshell.Io
 
-    ShellRoot {
-        id: root
+ShellRoot {
+    id: root
+    property int activeWs: 1
 
-        property int activeWorkspace: 1
-        property string hyprSock: ""
+    Timer {
+        interval: 300
+        running: true
+        repeat: true
+        onTriggered: wsProc.running = true
+    }
 
-        Component.onCompleted: {
-            sockProcess.running = true
-        }
-
-        Process {
-            id: sockProcess
-            command: ["ls", "/run/user/1000/hypr/"]
-            stdout: SplitParser {
-                onRead: data => {
-                    root.hyprSock = data.trim()
-                }
-            }
-        }
-
-        Timer {
-            interval: 150
-            running: true
-            repeat: true
-            onTriggered: {
-                if (root.hyprSock !== "") {
-                    wsProcess.running = true
-                }
-            }
-        }
-
-        Process {
-            id: wsProcess
-            command: ["bash", "-c", "HYPRLAND_INSTANCE_SIGNATURE=" + root.hyprSock + " hyprctl activeworkspace -j"]
-            stdout: SplitParser {
-                splitMarker: ""
-                onRead: data => {
-                    try {
-                        var obj = JSON.parse(data)
-                        root.activeWorkspace = obj.id
-                    } catch(e) {}
-                }
-            }
-        }
-
-        PanelWindow {
-            id: bar
-            anchors {
-                top: true
-                left: true
-                bottom: true
-            }
-            implicitWidth: 44
-            color: "#14141e"
-
-            ColumnLayout {
-                anchors.fill: parent
-                anchors.margins: 8
-                spacing: 6
-
-                Repeater {
-                    model: 5
-                    Rectangle {
-                        id: wsBtn
-                        property int wsNum: index + 1
-                        property bool isActive: wsNum === root.activeWorkspace
-
-                        width: 28
-                        height: 28
-                        radius: 14
-                        Layout.alignment: Qt.AlignHCenter
-
-                        color: isActive ? "#33ccff" : "#333340"
-
-                        Behavior on color { ColorAnimation { duration: 150 } }
-                        Behavior on scale { NumberAnimation { duration: 100; easing.type: Easing.OutQuad } }
-
-                        scale: mouseArea.containsMouse ? 1.2 : 1.0
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: parent.wsNum
-                            color: parent.isActive ? "#000000" : "#888888"
-                            font.pixelSize: 12
-                            font.bold: parent.isActive
-                        }
-
-                        MouseArea {
-                            id: mouseArea
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            onClicked: {
-                                clickProcess.command = ["bash", "-c", "HYPRLAND_INSTANCE_SIGNATURE=" + root.hyprSock + " hyprctl dispatch workspace " + parent.wsNum]
-                                clickProcess.running = true
-                            }
-                        }
-
-                        Process {
-                            id: clickProcess
-                        }
-                    }
-                }
-
-                Item { Layout.fillHeight: true }
-
-                Text {
-                    id: clock
-                    color: "#ffffff"
-                    font.pixelSize: 10
-                    font.bold: true
-                    Layout.alignment: Qt.AlignHCenter
-
-                    Timer {
-                        interval: 1000
-                        running: true
-                        repeat: true
-                        triggeredOnStart: true
-                        onTriggered: clock.text = Qt.formatTime(new Date(), "hh:mm")
-                    }
-                }
-
-                Item { Layout.fillHeight: true }
-
-                Text {
-                    text: "VOL"
-                    color: "#33ccff"
-                    font.pixelSize: 9
-                    Layout.alignment: Qt.AlignHCenter
-                }
+    Process {
+        id: wsProc
+        command: ["hyprctl", "activeworkspace", "-j"]
+        stdout: SplitParser {
+            splitMarker: ""
+            onRead: data => {
+                try { root.activeWs = JSON.parse(data).id } catch(e) {}
             }
         }
     }
+
+    PanelWindow {
+        anchors.top: true
+        anchors.left: true
+        anchors.bottom: true
+        implicitWidth: 48
+        color: "#2d2d44"
+
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 8
+            spacing: 8
+
+            Repeater {
+                model: 5
+                Rectangle {
+                    id: wsBtn
+                    property int num: index + 1
+                    width: 32
+                    height: 32
+                    radius: 16
+                    color: num === root.activeWs ? "#33ccff" : "#333350"
+                    Layout.alignment: Qt.AlignHCenter
+
+                    Behavior on color { ColorAnimation { duration: 150 } }
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: parent.num.toString()
+                        color: parent.num === root.activeWs ? "#000" : "#aaa"
+                        font.pixelSize: 14
+                        font.bold: true
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: {
+                            clickProc.command = ["hyprctl", "dispatch", "workspace", parent.num.toString()]
+                            clickProc.running = true
+                        }
+                    }
+                    Process { id: clickProc }
+                }
+            }
+
+            Item { Layout.fillHeight: true }
+
+            Rectangle {
+                width: 32; height: 32; radius: 8
+                color: volMa.containsMouse ? "#444466" : "#333350"
+                Layout.alignment: Qt.AlignHCenter
+                Text { anchors.centerIn: parent; text: "VOL"; color: "#aaa"; font.pixelSize: 9 }
+                MouseArea {
+                    id: volMa
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onClicked: { volProc.command = ["pamixer", "-t"]; volProc.running = true }
+                    onWheel: wheel => {
+                        volProc.command = ["pamixer", wheel.angleDelta.y > 0 ? "-i" : "-d", "5"]
+                        volProc.running = true
+                    }
+                }
+                Process { id: volProc }
+            }
+
+            Rectangle {
+                width: 32; height: 32; radius: 8
+                color: worMa.containsMouse ? "#444466" : "#333350"
+                Layout.alignment: Qt.AlignHCenter
+                Text { anchors.centerIn: parent; text: "BRI"; color: "#aaa"; font.pixelSize: 9 }
+                MouseArea {
+                    id: worMa
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onWheel: wheel => {
+                        briProc.command = ["brightnessctl", "set", wheel.angleDelta.y > 0 ? "+5%" : "5%-"]
+                        briProc.running = true
+                    }
+                }
+                Process { id: briProc }
+            }
+
+            Rectangle {
+                width: 32; height: 32; radius: 8
+                color: worMa2.containsMouse ? "#444466" : "#333350"
+                Layout.alignment: Qt.AlignHCenter
+                Text { anchors.centerIn: parent; text: "NET"; color: "#aaa"; font.pixelSize: 9 }
+                MouseArea {
+                    id: worMa2
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onClicked: { netProc.running = true }
+                }
+                Process { id: netProc; command: ["foot", "-e", "nmtui"] }
+            }
+
+            Rectangle {
+                width: 32; height: 32; radius: 8
+                color: worMa3.containsMouse ? "#444466" : "#333350"
+                Layout.alignment: Qt.AlignHCenter
+                Text { anchors.centerIn: parent; text: "SYS"; color: "#aaa"; font.pixelSize: 9 }
+                MouseArea {
+                    id: worMa3
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onClicked: { sysProc.running = true }
+                }
+                Process { id: sysProc; command: ["foot", "-e", "btop"] }
+            }
+        }
+    }
+}
   '';
 
   # ----- WALKER CONFIG (Spotlight-like launcher) -----
@@ -490,7 +492,7 @@
     ln -sf /etc/hypr/hyprland.conf /home/paul/.config/hypr/hyprland.conf
     ln -sf /etc/xdg/hypr/hyprlock.conf /home/paul/.config/hypr/hyprlock.conf
     ln -sf /etc/xdg/hypr/hypridle.conf /home/paul/.config/hypr/hypridle.conf
-    cp /etc/quickshell/shell.qml /home/paul/.config/quickshell/shell.qml
+    cp /etc/xdg/quickshell/shell.qml /home/paul/.config/quickshell/shell.qml
     ln -sf /etc/walker/config.toml /home/paul/.config/walker/config.toml
     ln -sf /etc/walker/style.css /home/paul/.config/walker/style.css
 
