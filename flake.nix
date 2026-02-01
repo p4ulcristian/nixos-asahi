@@ -13,6 +13,7 @@
   outputs = { self, nixpkgs, nixos-apple-silicon }:
   let
     system = "aarch64-linux";
+    pkgs = nixpkgs.legacyPackages.${system};
   in {
 
     # ===== VM (for testing) =====
@@ -38,6 +39,10 @@
     # ===== Build targets =====
     packages.${system} = {
       vm = self.nixosConfigurations.vm.config.system.build.vm;
+
+      # Build the full system closure (for manual install)
+      mac-toplevel = self.nixosConfigurations.mac.config.system.build.toplevel;
+
       default = self.packages.${system}.vm;
     };
   };

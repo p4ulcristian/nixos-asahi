@@ -1,5 +1,5 @@
 # Shared config for both VM and real M2 Mac
-# Using Omarchy-style stack: Waybar + Mako + Fuzzel + Swaybg
+# Using Omarchy-style stack: Walker + QuickShell + Swaybg
 { config, pkgs, lib, ... }:
 
 {
@@ -43,7 +43,7 @@
     uwsm                # Universal Wayland Session Manager
     swaybg              # Wallpaper
     swww                # Animated wallpaper daemon
-    fuzzel              # Launcher
+    walker              # Spotlight-like launcher
     hyprlock            # Lock screen
     hypridle            # Idle management
 
@@ -178,7 +178,8 @@
     bind = $mod, M, exit
     bind = $mod, E, exec, chromium
     bind = $mod, V, togglefloating
-    bind = $mod, D, exec, fuzzel
+    bind = $mod, D, exec, walker
+    bind = $mod, Space, exec, walker
     bind = $mod, F, fullscreen
     bind = $mod, L, exec, hyprlock
 
@@ -361,6 +362,96 @@
     }
   '';
 
+  # ----- WALKER CONFIG (Spotlight-like launcher) -----
+  environment.etc."walker/config.toml".text = ''
+    [ui]
+    fullscreen = false
+    show_initial_entries = true
+    orientation = "vertical"
+    width = 600
+    height = 400
+
+    [ui.anchors]
+    top = true
+
+    [search]
+    placeholder = "Search..."
+    delay = 0
+
+    [list]
+    height = 300
+    margin_top = 10
+    show_icons = true
+
+    [activation_mode]
+    labels = "jkl;asdf"
+
+    [[modules]]
+    name = "applications"
+    prefix = ""
+
+    [[modules]]
+    name = "runner"
+    prefix = ">"
+
+    [[modules]]
+    name = "calc"
+    prefix = "="
+  '';
+
+  environment.etc."walker/style.css".text = ''
+    * {
+      font-family: "JetBrainsMono Nerd Font", monospace;
+      font-size: 14px;
+    }
+
+    #window {
+      background: rgba(20, 20, 30, 0.95);
+      border-radius: 16px;
+      border: 2px solid rgba(51, 204, 255, 0.5);
+    }
+
+    #search {
+      background: rgba(40, 40, 50, 0.9);
+      border-radius: 12px;
+      padding: 12px 16px;
+      margin: 16px;
+      color: #ffffff;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    #search:focus {
+      border: 1px solid rgba(51, 204, 255, 0.5);
+    }
+
+    #list {
+      background: transparent;
+      margin: 0 16px 16px 16px;
+    }
+
+    #item {
+      padding: 10px 16px;
+      border-radius: 8px;
+      margin: 2px 0;
+    }
+
+    #item:selected {
+      background: rgba(51, 204, 255, 0.2);
+    }
+
+    #item:hover {
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    #text {
+      color: #ffffff;
+    }
+
+    #icon {
+      margin-right: 12px;
+    }
+  '';
+
   # ----- HYPRLOCK CONFIG -----
   environment.etc."xdg/hypr/hyprlock.conf".text = ''
     background {
@@ -394,11 +485,14 @@
   system.activationScripts.hyprlandConfig = ''
     mkdir -p /home/paul/.config/hypr
     mkdir -p /home/paul/.config/quickshell
+    mkdir -p /home/paul/.config/walker
 
     ln -sf /etc/hypr/hyprland.conf /home/paul/.config/hypr/hyprland.conf
     ln -sf /etc/xdg/hypr/hyprlock.conf /home/paul/.config/hypr/hyprlock.conf
     ln -sf /etc/xdg/hypr/hypridle.conf /home/paul/.config/hypr/hypridle.conf
     cp /etc/quickshell/shell.qml /home/paul/.config/quickshell/shell.qml
+    ln -sf /etc/walker/config.toml /home/paul/.config/walker/config.toml
+    ln -sf /etc/walker/style.css /home/paul/.config/walker/style.css
 
     # Download a nice dark wallpaper if not present
     if [ ! -f /home/paul/.config/wallpaper.jpg ]; then
