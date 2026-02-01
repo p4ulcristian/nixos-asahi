@@ -46,7 +46,9 @@
         ({ config, pkgs, lib, modulesPath, ... }: {
           imports = [ "${modulesPath}/image/repart.nix" ];
 
+          # Disable features that don't work in CI
           boot.supportedFilesystems.zfs = lib.mkForce false;
+          hardware.asahi.extractPeripheralFirmware = false;  # No firmware in CI
 
           # Build raw ext4 image
           image.repart = {

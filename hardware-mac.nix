@@ -5,15 +5,11 @@
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = false;  # Apple Silicon
 
-  # Asahi GPU & Audio
-  hardware.asahi = {
-    useExperimentalGPUDriver = true;
-    experimentalGPUInstallMode = "replace";
-    setupAsahiSound = true;
-  };
+  # Asahi Audio (GPU now in mainline mesa)
+  hardware.asahi.setupAsahiSound = true;
 
-  # Better WiFi for Apple
-  networking.wireless.iwd.enable = true;
+  # Use iwd as NetworkManager's WiFi backend (better for Apple)
+  networking.networkmanager.wifi.backend = "iwd";
 
   # Filesystem (adjust labels after install)
   fileSystems."/" = {
