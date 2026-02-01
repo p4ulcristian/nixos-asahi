@@ -62,13 +62,15 @@
             text = builtins.readFile ./install.sh;
           };
 
-          # Firmware for Apple Silicon
+          # Disable Asahi firmware extraction for installer (not needed)
+          hardware.asahi.extractPeripheralFirmware = false;
           hardware.asahi.useExperimentalGPUDriver = true;
           hardware.asahi.experimentalGPUInstallMode = "replace";
 
-          # Networking
-          networking.wireless.iwd.enable = true;
+          # Networking (use NetworkManager only, not iwd)
+          networking.wireless.enable = false;
           networking.networkmanager.enable = true;
+          networking.networkmanager.wifi.backend = "wpa_supplicant";
 
           isoImage.squashfsCompression = "zstd -Xcompression-level 6";
         })
