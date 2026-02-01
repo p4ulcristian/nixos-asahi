@@ -2,24 +2,32 @@
 
 Omarchy-style Hyprland for Apple Silicon Macs.
 
-## Install
+## One-Command Install
+
+From macOS Terminal:
 
 ```bash
-# 1. From macOS - create Linux partition (50GB+)
-curl https://alx.sh | sh
-# Select "UEFI environment only" option
-
-# 2. Download NixOS Asahi installer
-# https://github.com/tpwrules/nixos-apple-silicon/releases
-
-# 3. Flash to USB and boot (hold power button → Options → USB)
-
-# 4. Connect WiFi and run installer
-nmcli device wifi connect "SSID" password "PASS"
-curl -sL https://raw.githubusercontent.com/p4ulcristian/nixos-asahi/main/install.sh | sudo bash
+curl -sL https://raw.githubusercontent.com/p4ulcristian/nixos-asahi/main/asahi-install.sh | sh
 ```
 
-Reboot → hold power → select NixOS → done.
+This will:
+1. Install Asahi partition (if needed)
+2. Download Perfect NixOS installer
+3. Flash to USB
+4. Give you boot instructions
+
+## Manual Install
+
+```bash
+# 1. From macOS - create partition
+curl https://alx.sh | sh
+
+# 2. Download installer ISO from Releases
+# 3. Flash to USB and boot
+
+# 4. In installer, run:
+curl -sL https://raw.githubusercontent.com/p4ulcristian/nixos-asahi/main/install.sh | sudo bash
+```
 
 ## After Install
 
@@ -29,20 +37,23 @@ sudo nano /etc/nixos/common.nix
 
 # Apply changes
 sudo nixos-rebuild switch --flake /etc/nixos#mac
-
-# Or pull updates
-cd /etc/nixos && git pull
-sudo nixos-rebuild switch --flake .#mac
 ```
 
 ## Keys
 
-`ALT` + `Return` terminal | `D` launcher | `Q` close | `1-6` workspaces
+| Key | Action |
+|-----|--------|
+| `ALT + Return` | Terminal |
+| `ALT + D` | Walker launcher |
+| `ALT + Q` | Close window |
+| `ALT + 1-6` | Switch workspace |
 
 ## Sidebar
 
-- **1-5**: Switch workspace
-- **VOL**: Click mute, scroll adjust
-- **BRI**: Scroll adjust
-- **NET**: Click → nmtui
-- **SYS**: Click → btop
+| Button | Action |
+|--------|--------|
+| 1-5 | Switch workspace |
+| VOL | Click mute, scroll adjust |
+| BRI | Scroll adjust |
+| NET | Click → nmtui |
+| SYS | Click → btop |

@@ -36,13 +36,47 @@
       ];
     };
 
+    # ===== Installer image for Asahi =====
+    nixosConfigurations.installer = nixpkgs.lib.nixosSystem {
+      inherit system;
+      modules = [
+        nixos-apple-silicon.nixosModules.apple-silicon-support
+        "${nixpkgs}/nixos/modules/installer/cd-dvd/installation-cd-minimal.nix"
+        ({ config, pkgs, lib, ... }: {
+          # Include our config for post-install
+          environment.etc."nixos-perfect/flake.nix".source = ./flake.nix;
+          environment.etc."nixos-perfect/common.nix".source = ./common.nix;
+          environment.etc."nixos-perfect/hardware-mac.nix".source = ./hardware-mac.nix;
+
+          # Auto-install script
+          environment.systemPackages = with pkgs; [
+            git curl parted
+          ];
+
+          # Include install script
+          environment.etc."install-perfect.sh" = {
+            mode = "0755";
+            text = builtins.readFile ./install.sh;
+          };
+
+          # Firmware for Apple Silicon
+          hardware.asahi.useExperimentalGPUDriver = true;
+          hardware.asahi.experimentalGPUInstallMode = "replace";
+
+          # Networking
+          networking.wireless.iwd.enable = true;
+          networking.networkmanager.enable = true;
+
+          isoImage.squashfsCompression = "zstd -Xcompression-level 6";
+        })
+      ];
+    };
+
     # ===== Build targets =====
     packages.${system} = {
       vm = self.nixosConfigurations.vm.config.system.build.vm;
-
-      # Build the full system closure (for manual install)
       mac-toplevel = self.nixosConfigurations.mac.config.system.build.toplevel;
-
+      installer-iso = self.nixosConfigurations.installer.config.system.build.isoImage;
       default = self.packages.${system}.vm;
     };
   };

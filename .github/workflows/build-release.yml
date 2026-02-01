@@ -1,0 +1,59 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU for aarch64
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - uses: DeterminateSystems/nix-installer-action@main
+        with:
+          extra-conf: |
+            extra-platforms = aarch64-linux
+            extra-sandbox-paths = /run/binfmt
+
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+
+      - name: Build installer ISO
+        run: |
+          # Enable binfmt for aarch64
+          sudo apt-get update && sudo apt-get install -y qemu-user-static
+          nix build .#installer-iso --system aarch64-linux -L --extra-experimental-features "nix-command flakes"
+
+      - name: Prepare release
+        run: |
+          mkdir -p release
+          cp result/iso/*.iso release/perfect-nixos-installer.iso
+          cd release && sha256sum *.iso > SHA256SUMS
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            release/perfect-nixos-installer.iso
+            release/SHA256SUMS
+          body: |
+            ## Perfect NixOS for Apple Silicon
+
+            ### Install
+            ```bash
+            curl -sL https://raw.githubusercontent.com/p4ulcristian/nixos-asahi/main/asahi-install.sh | sh
+            ```
+
+            Or manually:
+            1. Download `perfect-nixos-installer.iso`
+            2. Flash to USB
+            3. Boot on Mac (hold power → Options → USB)
+            4. Run installer
