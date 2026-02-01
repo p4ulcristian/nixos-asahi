@@ -1,24 +1,20 @@
 # Perfect NixOS
 
-Omarchy-style Hyprland desktop for Apple Silicon Macs.
+Omarchy-style Hyprland for Apple Silicon Macs.
 
 ## Install
 
-1. Run Asahi installer from macOS (needs 50GB free):
-   ```bash
-   curl https://alx.sh | sh
-   ```
+```bash
+# 1. From macOS - create Linux partition (50GB+)
+curl https://alx.sh | sh
 
-2. Boot NixOS installer from USB ([download](https://github.com/tpwrules/nixos-apple-silicon/releases))
+# 2. Boot NixOS USB, connect WiFi, install
+nmcli device wifi connect "SSID" password "PASS"
+curl -sL https://raw.githubusercontent.com/p4ulcristian/nixos-asahi/main/install.sh | sudo bash
+```
 
-3. Connect to WiFi and install:
-   ```bash
-   nmcli device wifi connect "SSID" password "PASSWORD"
-   curl -sL https://raw.githubusercontent.com/p4ulcristian/nixos-asahi/main/install.sh | sudo bash
-   ```
+Reboot → select NixOS → done.
 
-4. Reboot and select NixOS from boot menu
-
-## Keybindings
+## Keys
 
 `ALT` + `Return` terminal | `D` launcher | `Q` close | `1-6` workspaces
