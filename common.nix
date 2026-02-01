@@ -41,7 +41,8 @@
     # AGS Desktop Shell
     ags                 # Aylur's GTK Shell v2
     swaybg              # Wallpaper
-    fuzzel              # Launcher (backup)
+    swww                # Animated wallpaper daemon
+    fuzzel              # Launcher
     hyprlock            # Lock screen
     hypridle            # Idle management
 
@@ -89,9 +90,10 @@
     # Monitor
     monitor=,1920x1080@60,auto,1
 
-    # Autostart - AGS shell
+    # Autostart - AGS shell + wallpaper
+    exec-once = swww-daemon
+    exec-once = sleep 1 && swww img ~/.config/wallpaper.jpg --transition-type grow --transition-pos center
     exec-once = ags run ~/.config/ags/bar.tsx
-    exec-once = swaybg -c "#0f0f0f"
     exec-once = hypridle
 
     # Environment
@@ -217,11 +219,26 @@
   # ----- AGS BAR CONFIG -----
   environment.etc."ags/bar.tsx".text = ''
     #!/usr/bin/env -S ags run
-    import { App, Astal, Gdk } from "astal/gtk3"
-    import { Variable } from "astal"
+    import { App, Astal, Gdk, Gtk } from "astal/gtk3"
+    import { Variable, bind } from "astal"
     import { exec, execAsync } from "astal/process"
 
-    const time = Variable("").poll(1000, () => exec("date '+%H:%M'"))
+    // Get Hyprland socket dynamically
+    const SOCK = exec("ls /run/user/1000/hypr/").trim()
+    const hyprctl = (cmd: string) => exec(`bash -c "HYPRLAND_INSTANCE_SIGNATURE=''${SOCK} hyprctl ''${cmd}"`)
+
+    const time = Variable("").poll(1000, () => exec("date \"+%a %b %d  %H:%M\""))
+    const user = exec("whoami").trim()
+
+    const volume = Variable("N/A").poll(2000, () => {
+      try { return exec("pamixer --get-volume") + "%" } catch { return "N/A" }
+    })
+
+    const activeWs = Variable(1).poll(200, () => {
+      try {
+        return JSON.parse(hyprctl("activeworkspace -j")).id
+      } catch { return 1 }
+    })
 
     function Bar(gdkmonitor: Gdk.Monitor) {
       return <window
@@ -231,11 +248,20 @@
         application={App}>
         <centerbox className="bar">
           <box halign={Gtk.Align.START}>
-            <label label="  1 2 3 4 5" />
+            <label className="logo" label={" " + user} />
+            <box className="workspaces">
+              {[1, 2, 3, 4, 5].map(i => (
+                <button
+                  className={bind(activeWs).as(a => a === i ? "ws active" : "ws")}
+                  onClicked={() => execAsync(`bash -c "HYPRLAND_INSTANCE_SIGNATURE=''${SOCK} hyprctl dispatch workspace ''${i}"`)}>
+                  <label label={String(i)} />
+                </button>
+              ))}
+            </box>
           </box>
-          <label className="clock" label={time()} />
-          <box halign={Gtk.Align.END}>
-            <label label="  Perfect" />
+          <label className="clock" label={bind(time)} />
+          <box halign={Gtk.Align.END} className="right">
+            <label className="volume" label={bind(volume).as(v => " " + v)} />
           </box>
         </centerbox>
       </window>
@@ -244,13 +270,34 @@
     App.start({
       css: `
         .bar {
-          background: rgba(15, 15, 15, 0.95);
-          color: white;
+          background: linear-gradient(180deg, rgba(20, 20, 30, 0.92) 0%, rgba(10, 10, 18, 0.88) 100%);
+          color: #e0e0e0;
           font-family: JetBrainsMono Nerd Font;
-          font-size: 14px;
-          padding: 6px 16px;
+          font-size: 13px;
+          padding: 6px 14px;
+          border-bottom: 1px solid rgba(80, 200, 255, 0.3);
         }
-        .clock { color: #33ccff; }
+        .logo { color: #33ccff; font-size: 16px; font-weight: bold; margin-right: 16px; }
+        .clock { color: #ffffff; font-weight: bold; font-size: 14px; }
+        .workspaces { margin-left: 4px; }
+        .ws {
+          background: rgba(255,255,255,0.1);
+          color: #666;
+          border: none;
+          border-radius: 50%;
+          min-width: 28px;
+          min-height: 28px;
+          padding: 0;
+          margin: 0 4px;
+        }
+        .ws label { margin: 0; padding: 0; }
+        .ws:hover { background: rgba(255,255,255,0.2); color: #aaa; }
+        .ws.active {
+          background: linear-gradient(135deg, #33ccff 0%, #00ff99 100%);
+          color: #000;
+          font-weight: bold;
+        }
+        .volume { color: #33ccff; margin-left: 16px; }
       `,
       main() {
         App.get_monitors().forEach(Bar)
@@ -297,6 +344,11 @@
     ln -sf /etc/xdg/hypr/hypridle.conf /home/paul/.config/hypr/hypridle.conf
     cp /etc/ags/bar.tsx /home/paul/.config/ags/bar.tsx
     chmod +x /home/paul/.config/ags/bar.tsx
+
+    # Download a nice dark wallpaper if not present
+    if [ ! -f /home/paul/.config/wallpaper.jpg ]; then
+      ${pkgs.curl}/bin/curl -sL "https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?w=1920&q=80" -o /home/paul/.config/wallpaper.jpg || true
+    fi
 
     chown -R paul:users /home/paul/.config
   '';
