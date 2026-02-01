@@ -30,33 +30,30 @@ jobs:
 
       - uses: DeterminateSystems/magic-nix-cache-action@main
 
-      - name: Build installer ISO
+      - name: Build disk image
         run: |
-          nix build .#installer-iso --system aarch64-linux -L --extra-experimental-features "nix-command flakes"
+          nix build .#disk-image --system aarch64-linux -L --extra-experimental-features "nix-command flakes"
 
       - name: Prepare release
         run: |
           mkdir -p release
-          cp result/iso/*.iso release/perfect-nixos-installer.iso
-          cd release && sha256sum *.iso > SHA256SUMS
+          cp result/*.raw release/perfect-nixos.img
+          gzip release/perfect-nixos.img
+          cd release && sha256sum *.gz > SHA256SUMS
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            release/perfect-nixos-installer.iso
+            release/perfect-nixos.img.gz
             release/SHA256SUMS
           body: |
             ## Perfect NixOS for Apple Silicon
 
-            ### Install
+            ### One-Command Install (from macOS)
             ```bash
             curl -sL https://raw.githubusercontent.com/p4ulcristian/nixos-asahi/main/asahi-install.sh | sh
             ```
 
-            Or manually:
-            1. Download `perfect-nixos-installer.iso`
-            2. Flash to USB
-            3. Boot on Mac (hold power → Options → USB)
-            4. Run installer
+            No USB required! Downloads and installs directly to partition.

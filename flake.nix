@@ -36,43 +36,33 @@
       ];
     };
 
-    # ===== Installer image for Asahi =====
-    nixosConfigurations.installer = nixpkgs.lib.nixosSystem {
+    # ===== Raw disk image for direct dd from macOS =====
+    nixosConfigurations.diskImage = nixpkgs.lib.nixosSystem {
       inherit system;
       modules = [
         nixos-apple-silicon.nixosModules.apple-silicon-support
-        "${nixpkgs}/nixos/modules/installer/cd-dvd/installation-cd-minimal.nix"
-        ({ config, pkgs, lib, ... }: {
-          # Disable ZFS (broken in current nixpkgs)
+        ./hardware-mac.nix
+        ./common.nix
+        ({ config, pkgs, lib, modulesPath, ... }: {
+          imports = [ "${modulesPath}/image/repart.nix" ];
+
           boot.supportedFilesystems.zfs = lib.mkForce false;
-          nixpkgs.config.allowBroken = true;
-          # Include our config for post-install
-          environment.etc."nixos-perfect/flake.nix".source = ./flake.nix;
-          environment.etc."nixos-perfect/common.nix".source = ./common.nix;
-          environment.etc."nixos-perfect/hardware-mac.nix".source = ./hardware-mac.nix;
 
-          # Auto-install script
-          environment.systemPackages = with pkgs; [
-            git curl parted
-          ];
-
-          # Include install script
-          environment.etc."install-perfect.sh" = {
-            mode = "0755";
-            text = builtins.readFile ./install.sh;
+          # Build raw ext4 image
+          image.repart = {
+            name = "perfect-nixos";
+            partitions = {
+              "root" = {
+                storePaths = [ config.system.build.toplevel ];
+                repartConfig = {
+                  Type = "root";
+                  Format = "ext4";
+                  Label = "nixos";
+                  Minimize = "guess";
+                };
+              };
+            };
           };
-
-          # Disable Asahi firmware extraction for installer (not needed)
-          hardware.asahi.extractPeripheralFirmware = false;
-          hardware.asahi.useExperimentalGPUDriver = true;
-          hardware.asahi.experimentalGPUInstallMode = "replace";
-
-          # Networking (use NetworkManager only, not iwd)
-          networking.wireless.enable = false;
-          networking.networkmanager.enable = true;
-          networking.networkmanager.wifi.backend = "wpa_supplicant";
-
-          isoImage.squashfsCompression = "zstd -Xcompression-level 6";
         })
       ];
     };
@@ -81,7 +71,10 @@
     packages.${system} = {
       vm = self.nixosConfigurations.vm.config.system.build.vm;
       mac-toplevel = self.nixosConfigurations.mac.config.system.build.toplevel;
-      installer-iso = self.nixosConfigurations.installer.config.system.build.isoImage;
+
+      # Raw disk image for dd install from macOS
+      disk-image = self.nixosConfigurations.diskImage.config.system.build.image;
+
       default = self.packages.${system}.vm;
     };
   };

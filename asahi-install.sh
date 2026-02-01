@@ -33,7 +33,8 @@ echo "[1/5] Checking for Asahi Linux partition..."
 echo ""
 
 # Find Linux partition
-LINUX_PART=$(diskutil list | grep -i "Linux Filesystem" | awk '{print $NF}' | head -1)
+LINUX_DISK=$(diskutil list | grep -B 5 "Linux Filesystem" | grep "/dev/disk" | awk '{print $1}' | head -1)
+LINUX_PART=$(diskutil list | grep "Linux Filesystem" | awk '{print $NF}' | head -1)
 
 if [[ -z "$LINUX_PART" ]]; then
     echo "No Linux partition found. Creating one with Asahi..."
@@ -53,81 +54,80 @@ if [[ -z "$LINUX_PART" ]]; then
     fi
 
     # Run Asahi installer for UEFI only
-    curl -sL https://alx.sh | sh
+    /bin/bash -c "$(curl -fsSL https://alx.sh)"
 
-    # Re-detect partition
-    LINUX_PART=$(diskutil list | grep -i "Linux Filesystem" | awk '{print $NF}' | head -1)
-
-    if [[ -z "$LINUX_PART" ]]; then
-        echo "Error: Linux partition not found after Asahi install."
-        echo "Please run this script again after rebooting."
-        exit 1
-    fi
+    echo ""
+    echo "Asahi setup complete. Please run this script again."
+    exit 0
 fi
 
-echo "Found Linux partition: $LINUX_PART"
+LINUX_DISK_PART="${LINUX_DISK}${LINUX_PART}"
+echo "Found Linux partition: $LINUX_DISK_PART"
 echo ""
 
-echo "[2/5] Downloading Perfect NixOS..."
+echo "[2/5] Downloading Perfect NixOS image..."
 echo ""
 
 # Get latest release
-RELEASE_URL=$(curl -sL "https://api.github.com/repos/$REPO/releases/latest" | grep "browser_download_url.*tar.gz" | cut -d '"' -f 4 | head -1)
+RELEASE_JSON=$(curl -sL "https://api.github.com/repos/$REPO/releases/latest")
+IMAGE_URL=$(echo "$RELEASE_JSON" | grep "browser_download_url.*img.gz" | cut -d '"' -f 4 | head -1)
 
-if [[ -z "$RELEASE_URL" ]]; then
-    echo "Error: Could not find release."
+if [[ -z "$IMAGE_URL" ]]; then
+    echo "Error: Could not find release image."
     echo "Check https://github.com/$REPO/releases"
     exit 1
 fi
 
 TEMP_DIR=$(mktemp -d)
-ROOTFS="$TEMP_DIR/nixos-rootfs.tar.gz"
+IMAGE_GZ="$TEMP_DIR/perfect-nixos.img.gz"
+IMAGE="$TEMP_DIR/perfect-nixos.img"
 
-echo "Downloading from: $RELEASE_URL"
-curl -L -o "$ROOTFS" "$RELEASE_URL"
+echo "Downloading: $IMAGE_URL"
+curl -L --progress-bar -o "$IMAGE_GZ" "$IMAGE_URL"
 
 echo ""
-echo "[3/5] Formatting partition..."
+echo "[3/5] Extracting image..."
+gunzip "$IMAGE_GZ"
+
 echo ""
-
-# Format as ext4 (need to unmount first if mounted)
-diskutil unmount "/dev/$LINUX_PART" 2>/dev/null || true
-
-echo "WARNING: This will ERASE /dev/$LINUX_PART"
-read -p "Continue? (yes/no) " CONFIRM
+echo "[4/5] Writing to partition..."
+echo ""
+echo "WARNING: This will ERASE $LINUX_DISK_PART"
+echo "Make sure this is the correct Linux partition!"
+diskutil list "$LINUX_DISK"
+echo ""
+read -p "Type 'yes' to continue: " CONFIRM
 if [[ "$CONFIRM" != "yes" ]]; then
     echo "Aborted."
+    rm -rf "$TEMP_DIR"
     exit 1
 fi
 
-# Use diskutil to erase and format
-# macOS can't create ext4, so we'll use the Linux installer to format
-# For now, just mark it ready
+# Unmount if mounted
+diskutil unmount "$LINUX_DISK_PART" 2>/dev/null || true
+diskutil unmountDisk "$LINUX_DISK" 2>/dev/null || true
+
+# Write image
+echo ""
+echo "Writing NixOS to $LINUX_DISK_PART..."
+echo "(This may take a few minutes)"
+sudo dd if="$IMAGE" of="$LINUX_DISK_PART" bs=4m status=progress
+sync
+
+# Cleanup
+rm -rf "$TEMP_DIR"
 
 echo ""
-echo "[4/5] Preparing boot..."
-echo ""
-
-# The actual extraction needs to happen from the NixOS installer
-# since macOS can't write ext4. We'll use a minimal bootstrap approach.
-
-# Download a minimal bootstrap script that runs on first boot
-BOOTSTRAP_URL="https://raw.githubusercontent.com/$REPO/main/install.sh"
-
-echo "Boot configuration ready."
-echo ""
-
 echo "[5/5] Done!"
 echo ""
 echo "  ╔═══════════════════════════════════════════════╗"
-echo "  ║                  Next Steps:                   ║"
+echo "  ║              Installation Complete!            ║"
 echo "  ╠═══════════════════════════════════════════════╣"
 echo "  ║  1. Reboot your Mac                           ║"
 echo "  ║  2. Hold POWER button at startup              ║"
-echo "  ║  3. Select 'NixOS' or 'EFI Boot'              ║"
-echo "  ║  4. At the prompt, run:                       ║"
-echo "  ║     curl -sL $BOOTSTRAP_URL | sudo bash       ║"
+echo "  ║  3. Select 'NixOS' from boot menu             ║"
+echo "  ║  4. Login: paul / nixos                       ║"
 echo "  ╚═══════════════════════════════════════════════╝"
 echo ""
-echo "Enjoy Perfect NixOS!"
+echo "Enjoy Perfect NixOS with Hyprland!"
 echo ""
