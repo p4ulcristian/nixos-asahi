@@ -17,18 +17,21 @@ jobs:
         with:
           platforms: arm64
 
+      - name: Install QEMU binfmt
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-user-static binfmt-support
+          sudo update-binfmts --enable qemu-aarch64
+
       - uses: DeterminateSystems/nix-installer-action@main
         with:
           extra-conf: |
             extra-platforms = aarch64-linux
-            extra-sandbox-paths = /run/binfmt
 
       - uses: DeterminateSystems/magic-nix-cache-action@main
 
       - name: Build installer ISO
         run: |
-          # Enable binfmt for aarch64
-          sudo apt-get update && sudo apt-get install -y qemu-user-static
           nix build .#installer-iso --system aarch64-linux -L --extra-experimental-features "nix-command flakes"
 
       - name: Prepare release
